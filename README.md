@@ -1,5 +1,10 @@
-# Nginx Sticky Module 
+# Nginx Sticky Module fix
 
+基於 Nginx Sticky Module v1.2.6 修正
+
+針對 nginx v1.22.1 與 openssl 3.0.1 處理
+
+# Nginx Sticky Module 
 
 modified and extended version; see Changelog.txt 
 
