@@ -18,10 +18,22 @@
   #define ngx_str_set(str, text) (str)->len = sizeof(text) - 1; (str)->data = (u_char *) text
 #endif
 
-// /* - bugfix for compiling on sles11 - needs gcc4.6 or later*/
-// #pragma GCC diagnostic ignored "-Wuninitialized" 
+/* - fix for 1.11.2 removes include <openssl/md5.h> in ngx_md5.h */
+#define MD5_CBLOCK  64
+#define MD5_LBLOCK  (MD5_CBLOCK/4)
+#define MD5_DIGEST_LENGTH 16
+#define SHA_CBLOCK 64
+#define SHA_DIGEST_LENGTH 20
 
-static ngx_int_t cookie_expires(char *str, size_t size, time_t t) 
+#ifndef SHA_DIGEST_LENGTH
+#define SHA_CBLOCK 64
+#define SHA_DIGEST_LENGTH 20
+#endif
+
+// /* - bugfix for compiling on sles11 - needs gcc4.6 or later*/
+// #pragma GCC diagnostic ignored "-Wuninitialized"
+
+static ngx_int_t cookie_expires(char *str, size_t size, time_t t)
 {
   char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   char *wdays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
@@ -36,10 +48,8 @@ ngx_int_t ngx_http_sticky_misc_set_cookie(ngx_http_request_t *r, ngx_str_t *name
 {
   u_char  *cookie, *p;
   size_t  len;
-  ngx_table_elt_t *set_cookie, *elt;
+  ngx_table_elt_t *set_cookie;
   ngx_str_t remove;
-  ngx_list_part_t *part;
-  ngx_uint_t i;
   char expires_str[80];
 
   int expires_len = 0;
@@ -77,7 +87,7 @@ ngx_int_t ngx_http_sticky_misc_set_cookie(ngx_http_request_t *r, ngx_str_t *name
     len += sizeof("; HttpOnly") - 1;
   }
 
-  cookie = ngx_pnalloc(r->pool, len); 
+  cookie = ngx_pnalloc(r->pool, len);
   if (cookie == NULL) {
     return NGX_ERROR;
   }
@@ -87,7 +97,7 @@ ngx_int_t ngx_http_sticky_misc_set_cookie(ngx_http_request_t *r, ngx_str_t *name
   p = ngx_copy(p, value->data, value->len);
 
   if (domain->len > 0) {
-    p = ngx_copy(p, "; Domain=", sizeof("; Domain=") - 1);  
+    p = ngx_copy(p, "; Domain=", sizeof("; Domain=") - 1);
     p = ngx_copy(p, domain->data, domain->len);
   }
 
@@ -97,43 +107,16 @@ ngx_int_t ngx_http_sticky_misc_set_cookie(ngx_http_request_t *r, ngx_str_t *name
   }
 
   if (path->len > 0) {
-    p = ngx_copy(p, "; Path=", sizeof("; Path=") - 1);  
+    p = ngx_copy(p, "; Path=", sizeof("; Path=") - 1);
     p = ngx_copy(p, path->data, path->len);
   }
 
   if (secure) {
-    p = ngx_copy(p, "; Secure", sizeof("; Secure") - 1);  
+    p = ngx_copy(p, "; Secure", sizeof("; Secure") - 1);
   }
 
   if (httponly) {
-    p = ngx_copy(p, "; HttpOnly", sizeof("; HttpOnly") - 1);  
-  }
-
-  part = &r->headers_out.headers.part;
-  elt = part->elts;
-  set_cookie = NULL;
-
-  for (i=0 ;; i++) {
-    if (part->nelts > 1 || i >= part->nelts) {
-      if (part->next == NULL) {
-        break;
-      }
-      part = part->next;
-      elt = part->elts;
-      i = 0;
-    }
-    /* ... */
-    if (ngx_strncmp(elt->value.data, name->data, name->len) == 0) {
-      set_cookie = elt;
-      break;
-    }
-  }
-
-  /* found a Set-Cookie header with the same name: replace it */
-  if (set_cookie != NULL) {
-    set_cookie->value.len = p - cookie;
-    set_cookie->value.data = cookie;
-    return NGX_OK;
+    p = ngx_copy(p, "; HttpOnly", sizeof("; HttpOnly") - 1);
   }
 
   set_cookie = ngx_list_push(&r->headers_out.headers);
@@ -282,78 +265,18 @@ ngx_int_t ngx_http_sticky_misc_hmac_sha1(ngx_pool_t *pool, void *in, size_t len,
   return NGX_OK;
 }
 
-ngx_int_t ngx_http_sticky_misc_text_raw(ngx_pool_t *pool, struct sockaddr *in, ngx_str_t *digest)
+ngx_int_t ngx_http_sticky_misc_text_raw(ngx_pool_t *pool, void *in, size_t len, ngx_str_t *digest)
 {
-  size_t len;
   if (!in) {
     return NGX_ERROR;
   }
-
-  switch (in->sa_family) {
-    case AF_INET:
-      len = NGX_INET_ADDRSTRLEN + sizeof(":65535") - 1;
-      break;
-
-#if (NGX_HAVE_INET6)
-    case AF_INET6:
-      len = NGX_INET6_ADDRSTRLEN + sizeof(":65535") - 1;
-      break;
-#endif
-
-#if (NGX_HAVE_UNIX_DOMAIN)
-    case AF_UNIX:
-      len = sizeof("unix:") - 1 + NGX_UNIX_ADDRSTRLEN;
-      break;
-#endif
-
-    default:
-      return NGX_ERROR;
-  }
-
 
   digest->data = ngx_pnalloc(pool, len);
   if (digest->data == NULL) {
     return NGX_ERROR;
   }
-
-  /* https://bitbucket.org/nginx-goodies/nginx-sticky-module-ng/issue/1/nginx-158-api-change-for-ngx_sock_ntop */
-#if defined(nginx_version) && nginx_version >= 1005003
-    digest->len = ngx_sock_ntop(in, sizeof(struct sockaddr_in), digest->data, len, 1);
-#else
-    digest->len = ngx_sock_ntop(in, digest->data, len, 1);
-#endif
+  memcpy(digest->data, in, len);
+  digest->len = len;
 
   return NGX_OK;
-
 }
-
-ngx_int_t ngx_http_sticky_misc_text_md5(ngx_pool_t *pool, struct sockaddr *in, ngx_str_t *digest)
-{
-  ngx_str_t str;
-  if (ngx_http_sticky_misc_text_raw(pool, in, &str) != NGX_OK) {
-    return NGX_ERROR;
-  }
-
-  if (ngx_http_sticky_misc_md5(pool, (void *)str.data, str.len, digest) != NGX_OK) {
-    ngx_pfree(pool, &str);
-    return NGX_ERROR;
-  }
-
-  return ngx_pfree(pool, &str);
-}
-
-ngx_int_t ngx_http_sticky_misc_text_sha1(ngx_pool_t *pool, struct sockaddr *in, ngx_str_t *digest)
-{
-  ngx_str_t str;
-  if (ngx_http_sticky_misc_text_raw(pool, in, &str) != NGX_OK) {
-    return NGX_ERROR;
-  }
-
-  if (ngx_http_sticky_misc_sha1(pool, (void *)str.data, str.len, digest) != NGX_OK) {
-    ngx_pfree(pool, &str);
-    return NGX_ERROR;
-  }
-
-  return ngx_pfree(pool, &str);
-}
-

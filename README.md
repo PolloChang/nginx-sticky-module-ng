@@ -1,6 +1,5 @@
 # Nginx Sticky Module 
 
-針對新的OpenSSL 更新
 
 modified and extended version; see Changelog.txt 
 
@@ -48,50 +47,80 @@ Modify your compile of Nginx by adding the following directive
       server 127.0.0.1:9002;
     }
 
-	  sticky [name=route] [domain=.foo.bar] [path=/] [expires=1h] 
-           [hash=index|md5|sha1] [no_fallback] [secure] [httponly];
-  
-  
-- name:    the name of the cookies used to track the persistant upstream srv; 
-  default: route
+	  sticky [hash=index|md5|sha1] [no_fallback] [transfer] [delimiter=.]
+           [name=route] [domain=.foo.bar] [path=/] [expires=1h] [secure] [httponly];
+       or
+	  sticky [hmac=md5|sha1 hmac_key=<foobar_key>] [no_fallback] [transfer] [delimiter=.]
+           [name=route] [domain=.foo.bar] [path=/] [expires=1h] [secure] [httponly];
+       or
+	  sticky [text=raw] [no_fallback] [transfer] [delimiter=.]
+           [name=route] [domain=.foo.bar] [path=/] [expires=1h] [secure] [httponly];
 
-- domain:  the domain in which the cookie will be valid
-  default: nothing. Let the browser handle this.
+Server selection algorithm:
+- `hash`: the hash mechanism to encode upstream server. It can't be used with hmac or text.  
+  default: `md5`
 
-- path:    the path in which the cookie will be valid
-  default: /
-
-- expires: the validity duration of the cookie
-  default: nothing. It's a session cookie.
-  restriction: must be a duration greater than one second
-
-- hash:    the hash mechanism to encode upstream server. It cant' be used with hmac.
-  default: md5
-
-    - md5|sha1: well known hash
-    - index:    it's not hashed, an in-memory index is used instead, it's quicker and the overhead is shorter
+  - `md5`|`sha1`: well known hash
+  - `index`: it's not hashed, an in-memory index is used instead, it's quicker and the overhead is shorter  
     Warning: the matching against upstream servers list
     is inconsistent. So, at reload, if upstreams servers
     has changed, index values are not guaranted to
-    correspond to the same server as before!
+    correspond to the same server as before!  
     USE IT WITH CAUTION and only if you need to!
- 
-- hmac:    the HMAC hash mechanism to encode upstream server
-    It's like the hash mechanism but it uses hmac_key
-    to secure the hashing. It can't be used with hash.
-    md5|sha1: well known hash
-    default: none. see hash.
 
-- hmac_key: the key to use with hmac. It's mandatory when hmac is set
-           default: nothing.
+- `hmac`: the HMAC hash mechanism to encode upstream server  
+  It's like the hash mechanism but it uses hmac_key
+  to secure the hashing. It can't be used with hash or text.  
+  `md5`|`sha1`: well known hash
 
-- no_fallback: when this flag is set, nginx will return a 502 (Bad Gateway or
-              Proxy Error) if a request comes with a cookie and the
-              corresponding backend is unavailable.
+- `hmac_key`: the key to use with hmac. It's mandatory when hmac is set
 
-- secure    enable secure cookies; transferred only via https
-- httponly  enable cookies not to be leaked via js
+- `no_fallback`: when this flag is set, nginx will return a 502 (Bad Gateway or
+  Proxy Error) if a request comes with a cookie and the
+  corresponding backend is unavailable. You can set it to the
+  upstream block, or set `sticky_no_fallback` in a server or
+  location block.
 
+- `transfer`: when this flag is set, nginx adds a cookie from the backend to the sticky cookie  
+  default: space
+
+  Example for remove peer part from cookie before sand it to backend:
+  ```
+    server {
+      # ...
+      set $jsessionid $cookie_JSESSIONID;
+      if ($cookie_JSESSIONID ~ "^[^\s]+\s(.*)$") {
+        set $jsessionid $1;
+      }
+      location / {
+        proxy_set_header Cookie "JSESSIONID=$jsessionid";
+        proxy_pass http://backend;
+      }
+    }
+  ```
+
+- delimiter: delimiter to add a cookie from the backend  
+
+Cookie settings:
+- `name`: the name of the cookie used to track the persistant upstream srv;  
+  default: `route`
+
+- `domain`: the domain in which the cookie will be valid  
+  default: none. Let the browser handle this.
+
+- `path`: the path in which the cookie will be valid  
+  default: `/`
+
+- `expires`: the validity duration of the cookie  
+  default: nothing. It's a session cookie.  
+  restriction: must be a duration greater than one second
+
+- `secure`: enable secure cookies; transferred only via https
+- `httponly`: enable cookies not to be leaked via js
+- `hide_cookie`: does not send cookies to the client side  
+  This is to use cookies exclusively for routing only.  
+  You can set it to the upstream block, or set `sticky_hide_cookie` in a server or
+  location block.
 
 # Detail Mechanism
 
@@ -106,8 +135,7 @@ Modify your compile of Nginx by adding the following directive
 
 - sticky module does not work with the "backup" option of the "server" configuration item.
 - sticky module might work with the nginx_http_upstream_check_module (up from version 1.2.3)
-- sticky module may require to configure nginx with SSL support (when using "secure" option)
-  
+- sticky module does not modify cookie from a client to the backend if "transfer" flag is set.
 
 
 # Contributing
@@ -127,9 +155,10 @@ see Todo.md
   
 # Authors & Credits
 
-- Jerome Loyet, inital module
+- Jerome Loyet, initial module
 - Markus Linnala, httponly/secure-cookies-patch
 - Peter Bowey, Nginx 1.5.8 API-Change 
+- Michael Chernyak for Max-Age-Patch 
 - anybody who suggested a patch, created an issue on bitbucket or helped improving this module 
 
 
@@ -139,7 +168,6 @@ see Todo.md
     This module is licenced under the BSD license.
   
     Copyright (C) 2010 Jerome Loyet (jerome at loyet dot net)
-    Copyright (C) 2012 Markus Linnala (markus.linnala@gmail.com)
     Copyright (C) 2014 Markus Manzke (goodman at nginx-goodies dot com)
 
   
