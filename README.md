@@ -127,10 +127,9 @@ see Todo.md
   
 # Authors & Credits
 
-- Jerome Loyet, initial module
+- Jerome Loyet, inital module
 - Markus Linnala, httponly/secure-cookies-patch
 - Peter Bowey, Nginx 1.5.8 API-Change 
-- Michael Chernyak for Max-Age-Patch 
 - anybody who suggested a patch, created an issue on bitbucket or helped improving this module 
 
 
@@ -140,6 +139,7 @@ see Todo.md
     This module is licenced under the BSD license.
   
     Copyright (C) 2010 Jerome Loyet (jerome at loyet dot net)
+    Copyright (C) 2012 Markus Linnala (markus.linnala@gmail.com)
     Copyright (C) 2014 Markus Manzke (goodman at nginx-goodies dot com)
 
   

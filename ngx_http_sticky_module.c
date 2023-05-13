@@ -3,7 +3,7 @@
  * Copyright (C) Jerome Loyet <jerome at loyet dot net>
  */
 
-#include <nginx.h>
+
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
@@ -204,7 +204,7 @@ static ngx_int_t ngx_http_init_sticky_peer(ngx_http_request_t *r, ngx_http_upstr
 	iphp->request = r;
 
 	/* check weather a cookie is present or not and save it */
-	if (ngx_http_parse_multi_header_lines(&r->headers_in.cookie, &iphp->sticky_conf->cookie_name, &route) != NGX_DECLINED) {
+	if (ngx_http_parse_multi_header_lines(&r->headers_in.cookies, &iphp->sticky_conf->cookie_name, &route) != NGX_DECLINED) {
 		/* a route cookie has been found. Let's give it a try */
 		ngx_log_debug(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "[sticky/init_sticky_peer] got cookie route=%V, let's try to find a matching peer", &route);
 
@@ -268,8 +268,8 @@ static ngx_int_t ngx_http_get_sticky_peer(ngx_peer_connection_t *pc, void *data)
 	ngx_http_sticky_srv_conf_t   *conf = iphp->sticky_conf;
 	ngx_int_t                     selected_peer = -1;
 	time_t                        now = ngx_time();
-	uintptr_t                     m = 0;
-	ngx_uint_t                    n = 0, i;
+	uintptr_t                     m;
+	ngx_uint_t                    n, i;
 	ngx_http_upstream_rr_peer_t  *peer = NULL;
 
 	ngx_log_debug(NGX_LOG_DEBUG_HTTP, pc->log, 0, "[sticky/get_sticky_peer] get sticky peer, try: %ui, n_peers: %ui, no_fallback: %ui/%ui", pc->tries, iphp->rrp.peers->number, conf->no_fallback, iphp->no_fallback);
@@ -337,12 +337,7 @@ static ngx_int_t ngx_http_get_sticky_peer(ngx_peer_connection_t *pc, void *data)
 	if (peer && selected_peer >= 0) {
 		ngx_log_debug(NGX_LOG_DEBUG_HTTP, pc->log, 0, "[sticky/get_sticky_peer] peer found at index %i", selected_peer);
 
-#if defined(nginx_version) && nginx_version >= 1009000
-		iphp->rrp.current = peer;
-#else
 		iphp->rrp.current = iphp->selected_peer;
-#endif		
-		
 		pc->cached = 0;
 		pc->connection = NULL;
 		pc->sockaddr = peer->sockaddr;
